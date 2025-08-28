@@ -345,7 +345,23 @@ class DonorController extends Controller
             'status' => ['required', Rule::in(['active', 'inactive', 'blocked', 'deceased'])],
         ]);
 
+        $oldStatus = $donor->status;
         $donor->update($validated);
+
+        // Record audit log
+        AuditLog::record('donor.status_updated', $request->user(), $donor, [
+            'description' => "Donor '{$donor->name}' status changed from '{$oldStatus}' to '{$validated['status']}'",
+            'old' => ['status' => $oldStatus],
+            'new' => ['status' => $validated['status']]
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Donor status updated successfully.',
+                'new_status' => $validated['status']
+            ]);
+        }
 
         return back()->with('success', 'Donor status updated successfully.');
     }
