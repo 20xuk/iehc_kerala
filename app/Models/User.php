@@ -58,6 +58,7 @@ class User extends Authenticatable
         'last_login_at',
         'role',
         'password_change_required',
+        'last_login_ip',
     ];
 
     /**

