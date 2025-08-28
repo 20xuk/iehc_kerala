@@ -41,4 +41,12 @@ class Country extends Model
             ->orderBy('name')
             ->pluck('name', 'id');
     }
+
+    /**
+     * Get regions for this country
+     */
+    public function regions()
+    {
+        return $this->hasMany(Region::class);
+    }
 }

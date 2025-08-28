@@ -67,9 +67,12 @@ class Theme extends Model
     public function getCssVariables()
     {
         $colors = $this->colors ?? [];
+        $primaryHex = $colors['primary'] ?? '#3b82f6';
+        $primaryRgb = $this->hexToRgbString($primaryHex);
         
         return [
-            '--primary-color' => $colors['primary'] ?? '#3b82f6',
+            '--primary-color' => $primaryHex,
+            '--primary-rgb' => $primaryRgb,
             '--primary-dark' => $colors['primary_dark'] ?? '#1d4ed8',
             '--primary-light' => $colors['primary_light'] ?? '#60a5fa',
             '--secondary-color' => $colors['secondary'] ?? '#64748b',
@@ -96,6 +99,22 @@ class Theme extends Model
             '--info-dark' => $colors['info_dark'] ?? '#1d4ed8',
             '--info-light' => $colors['info_light'] ?? '#60a5fa',
         ];
+    }
+
+    /**
+     * Convert a hex color (e.g. #3b82f6) to an RGB string "59, 130, 246".
+     */
+    private function hexToRgbString(string $hex): string
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) === 3) {
+            $hex = preg_replace('/(.)/u', '$1$1', $hex);
+        }
+        $parts = sscanf('#' . $hex, '#%02x%02x%02x');
+        if (!$parts || count($parts) !== 3) {
+            return '59, 130, 246'; // fallback to Tailwind blue-500
+        }
+        return implode(', ', $parts);
     }
 
     /**

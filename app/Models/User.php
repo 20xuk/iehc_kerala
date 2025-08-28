@@ -32,6 +32,7 @@ class User extends Authenticatable
         'date_of_birth',
         'wedding_date',
         'gender',
+        'marital_status',
         'address_line_1',
         'address_line_2',
         'city',
@@ -39,12 +40,15 @@ class User extends Authenticatable
         'region',
         'postal_code',
         'country',
+        'country_id',
+        'region_id',
         'occupation',
         'company',
         'donor_type',
         'donation_frequency',
         'source',
         'notes',
+        'amount_promised',
         'status',
         'email_verified',
         'phone_verified',
@@ -454,5 +458,34 @@ class User extends Authenticatable
     public function getCompletedCollectionsCountAttribute(): int
     {
         return $this->collections()->where('status', 'completed')->count();
+    }
+
+    /**
+     * Get the country that owns this user
+     */
+    public function country()
+    {
+        return $this->belongsTo(Country::class);
+    }
+
+    /**
+     * Get the region that owns this user
+     */
+    public function region()
+    {
+        return $this->belongsTo(Region::class);
+    }
+
+    /**
+     * Get encrypted donor ID (8 digits)
+     */
+    public function getEncryptedDonorIdAttribute()
+    {
+        // Create a simple hash based on user ID and some salt
+        $hash = hash('crc32', $this->id . 'IEHC_DONOR_SALT_2024');
+        // Take first 8 characters and ensure it's numeric
+        $numericHash = preg_replace('/[^0-9]/', '', $hash);
+        // Pad with zeros if less than 8 digits
+        return str_pad(substr($numericHash, 0, 8), 8, '0', STR_PAD_LEFT);
     }
 }

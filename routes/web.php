@@ -130,6 +130,17 @@ Route::middleware('auth')->group(function () {
         Route::resource('donors', DonorController::class);
         Route::get('donors/blocked/list', [DonorController::class, 'blocked'])->name('donors.blocked');
         Route::patch('donors/{donor}/status', [DonorController::class, 'updateStatus'])->name('donors.update-status');
+        Route::get('donors/{donor}/audit-logs', [DonorController::class, 'auditLogs'])->name('donors.audit-logs');
+Route::post('donors/{donor}/upload-avatar', [DonorController::class, 'uploadAvatar'])->name('donors.upload-avatar');
+
+// API routes for dynamic dropdowns
+Route::get('api/countries', function() {
+    return response()->json(App\Models\Country::getForSelect());
+})->name('api.countries');
+
+Route::get('api/regions/{countryId}', function($countryId) {
+    return response()->json(App\Models\Region::getForCountry($countryId));
+})->name('api.regions.by.country');
 
         // Collection Management
         Route::resource('collections', CollectionController::class);

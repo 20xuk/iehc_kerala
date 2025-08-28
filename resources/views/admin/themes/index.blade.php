@@ -57,7 +57,10 @@
                 @foreach($themes as $theme)
                 <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
                     <div class="flex items-center justify-between mb-3">
-                        <h4 class="text-lg font-semibold text-gray-900">{{ $theme->name }}</h4>
+                        <div class="flex items-center">
+                            <input type="radio" id="admin-theme-{{ $theme->slug }}" name="admin-theme-choice" class="form-radio" />
+                            <label for="admin-theme-{{ $theme->slug }}" class="ml-2 text-sm font-medium text-gray-900">{{ $theme->name }}</label>
+                        </div>
                         @if($theme->is_active)
                         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             Active
@@ -74,8 +77,9 @@
                     
                     <p class="text-sm text-gray-600 mb-3">{{ $theme->description }}</p>
                     
-                    <button onclick="applyThemeDirectly('{{ $theme->slug }}')" 
-                            class="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors">
+                    <button type="button" onclick="applyThemeDirectly('{{ $theme->slug }}')" 
+                            class="apply-theme-btn w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            data-theme-slug="{{ $theme->slug }}" disabled>
                         Apply Theme
                     </button>
                 </div>
@@ -86,7 +90,7 @@
 </div>
 
 <script>
-function showThemeModal() {
+window.showThemeModal = function() {
     // Load theme modal content
     fetch('/admin/themes/modal')
         .then(response => response.text())
@@ -113,25 +117,33 @@ function showThemeModal() {
         });
 }
 
-function applyThemeDirectly(themeSlug) {
-    fetch('/admin/themes/apply', {
+window.applyThemeDirectly = function(themeSlug) {
+    // guard: require corresponding radio selected
+    const radio = document.getElementById(`admin-theme-${themeSlug}`);
+    const btn = document.querySelector(`.apply-theme-btn[data-theme-slug="${themeSlug}"]`);
+    if (!radio || !radio.checked) {
+        if (btn) { btn.disabled = true; }
+        showNotification('Select this theme first', 'error');
+        return;
+    }
+    fetch('{{ route('user.themes.update') }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
         },
-        body: JSON.stringify({ theme_slug: themeSlug })
+        credentials: 'same-origin',
+        body: JSON.stringify({ theme_slug: themeSlug, use_system_theme: false })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            // Show success message
+        if (data && data.success) {
             showNotification('Theme applied successfully!', 'success');
-            
-            // Reload page to apply theme fully
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            refreshThemeCss();
+        } else {
+            showNotification('Failed to apply theme', 'error');
         }
     })
     .catch(error => {
@@ -155,6 +167,35 @@ function showNotification(message, type) {
         notification.remove();
     }, 3000);
 }
+
+// Refresh theme CSS without full reload (cache-bust link)
+function refreshThemeCss() {
+    const link = document.getElementById('theme-css');
+    if (!link) return;
+    const baseHref = link.getAttribute('href').split('?')[0];
+    link.setAttribute('href', `${baseHref}?v=${Date.now()}`);
+}
+
+// Fallback: delegate clicks in case inline onclick is blocked
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.apply-theme-btn');
+    if (!btn) return;
+    const slug = btn.getAttribute('data-theme-slug');
+    if (!slug) return;
+    e.preventDefault();
+    applyThemeDirectly(slug);
+});
+
+// enable/disable Apply buttons when radios change
+document.addEventListener('change', function(e) {
+    const radio = e.target.closest('input[type="radio"][name="admin-theme-choice"]');
+    if (!radio) return;
+    const allButtons = document.querySelectorAll('.apply-theme-btn');
+    allButtons.forEach(b => b.disabled = true);
+    const slug = radio.id.replace('admin-theme-','');
+    const btn = document.querySelector(`.apply-theme-btn[data-theme-slug="${slug}"]`);
+    if (btn) btn.disabled = false;
+});
 </script>
 
 @include('admin.themes.modal')

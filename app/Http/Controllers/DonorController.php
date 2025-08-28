@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -32,9 +33,16 @@ class DonorController extends Controller
             $query->where('donor_type', $request->donor_type);
         }
 
-        // Filter by status
+        // Filter by status - default to active if no status specified
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            if ($request->status === 'all') {
+                // Show all donors regardless of status
+            } else {
+                $query->where('status', $request->status);
+            }
+        } else {
+            // Default to showing only active donors
+            $query->where('status', 'active');
         }
 
         // Sort by postal code
@@ -81,20 +89,22 @@ class DonorController extends Controller
             'phone_alt1' => 'nullable|string|max:15',
             'phone_alt2' => 'nullable|string|max:15',
             'date_of_birth' => 'nullable|date',
-            'wedding_date' => 'nullable|date',
+            'wedding_date' => 'nullable|date|required_if:marital_status,married',
             'gender' => 'nullable|in:male,female,other',
+            'marital_status' => 'nullable|in:single,married,divorced,widowed',
             'address_line_1' => 'required|string|max:255',
-            'address_line_2' => 'required|string|max:255',
+            'address_line_2' => 'nullable|string|max:255',
             'city' => 'required|string|max:100',
             'state' => 'required|string|max:100',
-            'postal_code' => 'required|string|max:10',
-            'region' => 'nullable|string|max:100',
-            'country' => 'required|string|max:100',
+            'postal_code' => 'nullable|string|max:10',
+            'country_id' => 'nullable|exists:countries,id',
+            'region_id' => 'nullable|exists:regions,id',
             'occupation' => 'required|string|max:255',
             'company' => 'nullable|string|max:255',
             'donor_type' => ['required', Rule::in(['individual', 'corporate', 'foundation', 'church', 'anonymous'])],
             'donation_frequency' => 'nullable|in:weekly,bi_monthly,monthly,quarterly,half_yearly,yearly,one_time,on_demand,special_occasion,festival,anniversary,birthday,other',
             'notes' => 'nullable|string',
+            'amount_promised' => 'nullable|numeric|min:0',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
@@ -124,11 +134,29 @@ class DonorController extends Controller
             ->first();
 
         if ($duplicate) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A donor with this name and address already exists.'
+                ], 422);
+            }
             return back()->withErrors(['duplicate' => 'A donor with this name and address already exists.'])
                         ->withInput();
         }
 
         $donor = User::create($validated);
+        AuditLog::record('donor.created', $request->user(), $donor, [
+            'description' => "Donor '{$donor->name}' was created",
+            'new' => $donor->only(['name','email','phone','address_line_1'])
+        ]);
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Donor created successfully.',
+                'donor' => $donor->only(['id', 'name', 'email', 'phone', 'donor_type', 'status'])
+            ]);
+        }
 
         if ($request->input('redirect_to') === 'index') {
             return redirect()->route('donors.index')->with('success', 'Donor created successfully.');
@@ -189,19 +217,21 @@ class DonorController extends Controller
             'phone_alt1' => 'nullable|string|max:15',
             'phone_alt2' => 'nullable|string|max:15',
             'date_of_birth' => 'nullable|date',
-            'wedding_date' => 'nullable|date',
+            'wedding_date' => 'nullable|date|required_if:marital_status,married',
             'gender' => 'nullable|in:male,female,other',
             'address_line_1' => 'required|string|max:255',
             'address_line_2' => 'nullable|string|max:255',
             'city' => 'required|string|max:100',
             'state' => 'required|string|max:100',
             'postal_code' => 'nullable|string|max:10',
-            'region' => 'nullable|string|max:100',
-            'country' => 'required|string|max:100',
+            'country_id' => 'nullable|exists:countries,id',
+            'region_id' => 'nullable|exists:regions,id',
             'occupation' => 'nullable|string|max:255',
             'company' => 'nullable|string|max:255',
             'donor_type' => ['required', Rule::in(['individual', 'corporate', 'foundation', 'church', 'anonymous'])],
             'donation_frequency' => 'nullable|in:weekly,bi_monthly,monthly,quarterly,half_yearly,yearly,one_time,on_demand,special_occasion,festival,anniversary,birthday,other',
+            'marital_status' => 'nullable|in:single,married,divorced,widowed',
+            'amount_promised' => 'nullable|numeric|min:0',
             'status' => ['required', Rule::in(['active', 'inactive', 'blocked', 'deceased'])],
             'notes' => 'nullable|string',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
@@ -236,7 +266,14 @@ class DonorController extends Controller
             $validated['profile_picture'] = $path;
         }
 
+        $original = $donor->only(array_keys($validated));
         $donor->update($validated);
+        $changes = [
+            'description' => "Donor '{$donor->name}' was updated",
+            'old' => $original,
+            'new' => $donor->only(array_keys($validated)),
+        ];
+        AuditLog::record('donor.updated', $request->user(), $donor, $changes);
 
         return redirect()->route('donors.show', $donor)
                         ->with('success', 'Donor updated successfully.');
@@ -254,18 +291,45 @@ class DonorController extends Controller
             return back()->withErrors(['delete' => 'Cannot delete donor with active collections.']);
         }
 
+        $snapshot = $donor->only(['name','email','phone','address_line_1']);
         $donor->delete();
+        AuditLog::record('donor.deleted', $request->user(), $donor, [
+            'description' => "Donor '{$snapshot['name']}' was deleted",
+            'old' => $snapshot
+        ]);
 
         return redirect()->route('donors.index')
                         ->with('success', 'Donor deleted successfully.');
     }
 
-    public function blocked()
+    public function blocked(Request $request)
     {
-        $donors = User::donors()
-            ->whereIn('status', ['blocked', 'deceased'])
-            ->orderBy('name')
-            ->paginate(20);
+        $query = User::donors()->whereNotIn('status', ['active']);
+
+        // Search functionality
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('postal_code', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by donor type
+        if ($request->filled('donor_type')) {
+            $query->where('donor_type', $request->donor_type);
+        }
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $donors = $query->orderBy('name')->paginate(20);
 
         return view('donors.blocked', compact('donors'));
     }
@@ -284,5 +348,70 @@ class DonorController extends Controller
         $donor->update($validated);
 
         return back()->with('success', 'Donor status updated successfully.');
+    }
+
+    public function auditLogs(User $donor)
+    {
+        // Ensure this is a donor
+        if ($donor->role !== 'donor') {
+            abort(404);
+        }
+
+        $logs = AuditLog::where('model_type', User::class)
+            ->where('model_id', $donor->id)
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'logs' => $logs
+        ]);
+    }
+
+    public function uploadAvatar(Request $request, User $donor)
+    {
+        // Ensure this is a donor
+        if ($donor->role !== 'donor') {
+            return response()->json(['success' => false, 'message' => 'Invalid donor'], 404);
+        }
+
+        $request->validate([
+            'profile_picture' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048'
+        ]);
+
+        try {
+            // Delete old profile picture if exists
+            if ($donor->profile_picture) {
+                \Storage::disk('public')->delete($donor->profile_picture);
+            }
+
+            // Upload new profile picture
+            $profilePicture = $request->file('profile_picture');
+            $filename = 'donor_' . $donor->id . '_' . time() . '.' . $profilePicture->getClientOriginalExtension();
+            $path = $profilePicture->storeAs('profile-pictures', $filename, 'public');
+
+            // Update donor record
+            $donor->update(['profile_picture' => $path]);
+
+            // Record audit log
+            AuditLog::record('donor.avatar_updated', $request->user(), $donor, [
+                'description' => "Profile picture updated for donor '{$donor->name}'",
+                'new' => ['profile_picture' => $path]
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile picture updated successfully',
+                'avatar_url' => \Storage::url($path),
+                'donor_name' => $donor->name
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error uploading image: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

@@ -22,6 +22,13 @@
     
     <!-- Additional Styles -->
     <style>
+        /* Use CSS variables for app-wide themeable colors */
+        :root {
+            --app-primary: var(--primary-color, #3b82f6);
+            --app-primary-rgb: var(--primary-rgb, 59, 130, 246);
+            --app-surface: var(--surface-color, #f8fafc);
+            --app-text: var(--text-primary, #1e293b);
+        }
         .sidebar {
             transition: all 0.3s ease;
         }
@@ -56,11 +63,11 @@
             transition: all 0.2s ease;
         }
         .nav-item:hover {
-            background-color: rgba(59, 130, 246, 0.1);
+            background-color: rgba(var(--app-primary-rgb), 0.1);
         }
         .nav-item.active {
-            background-color: rgba(59, 130, 246, 0.2);
-            border-right: 3px solid #3b82f6;
+            background-color: rgba(var(--app-primary-rgb), 0.15);
+            border-right: 3px solid var(--app-primary);
         }
         .sidebar-toggle-icon {
             transition: transform 0.3s ease;

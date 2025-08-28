@@ -219,7 +219,7 @@
                                 <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
                             </svg>
-                            </div>
+                        </div>
                             <div>
                                 <p class="text-sm font-semibold text-slate-600">Total Users</p>
                                 <p class="text-2xl font-bold text-slate-900" id="total-users">0</p>
@@ -233,11 +233,11 @@
                                 <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
-                            </div>
+                        </div>
                             <div>
                                 <p class="text-sm font-semibold text-slate-600">System Theme Users</p>
                                 <p class="text-2xl font-bold text-slate-900" id="system-theme-users">0</p>
-                            </div>
+                    </div>
                 </div>
             </div>
 
@@ -247,7 +247,7 @@
                                 <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17v4a2 2 0 002 2h4M15 7l2-2 2 2-2 2-2-2zm-4 4l.5-.5"></path>
                             </svg>
-                            </div>
+                        </div>
                             <div>
                                 <p class="text-sm font-semibold text-slate-600">Custom Theme Users</p>
                                 <p class="text-2xl font-bold text-slate-900" id="custom-theme-users">0</p>
@@ -378,10 +378,15 @@ function renderThemeGrid(themes, pref) {
 
     themes.forEach(theme => {
         const themeCard = document.createElement('div');
-        themeCard.className = 'bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 cursor-pointer';
+        themeCard.className = 'bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2';
         themeCard.onclick = (e) => {
-            if (e.target && e.target.name === 'theme-choice') return; // let radio handler run
-            selectTheme(theme.slug);
+            const isControl = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button'));
+            if (isControl) return;
+            const r = themeCard.querySelector(`#theme-${theme.slug}`);
+            if (r) {
+                r.checked = true;
+                r.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         };
         
         themeCard.innerHTML = `
@@ -402,7 +407,7 @@ function renderThemeGrid(themes, pref) {
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${theme.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
                         ${theme.is_active ? 'Active' : 'Available'}
                     </span>
-                    <button class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200" onclick="event.stopPropagation(); selectTheme('${theme.slug}');">Apply</button>
+                    <button type="button" class="apply-btn inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold rounded-lg transition-all duration-200" data-theme-slug="${theme.slug}" ${currentSlug === theme.slug ? '' : 'disabled'} style="opacity:${currentSlug === theme.slug ? 1 : 0.5}; cursor:${currentSlug === theme.slug ? 'pointer' : 'not-allowed'};" onclick="event.stopPropagation(); if(!this.disabled){ applySelectedThemeFromCard(this); }">Apply</button>
                 </div>
             </div>
         `;
@@ -411,8 +416,12 @@ function renderThemeGrid(themes, pref) {
         setTimeout(() => {
             const radio = themeCard.querySelector(`#theme-${theme.slug}`);
             if (radio) {
-                radio.addEventListener('change', function(e){
-                    if (this.checked) selectTheme(theme.slug);
+                radio.addEventListener('change', function(){
+                    // disable all apply buttons first
+                    document.querySelectorAll('.apply-btn').forEach(b => { b.disabled = true; b.style.opacity = 0.5; b.style.cursor = 'not-allowed'; });
+                    // enable only this card's button
+                    const btn = themeCard.querySelector('.apply-btn');
+                    if (btn) { btn.disabled = !this.checked; btn.style.opacity = this.checked ? 1 : 0.5; btn.style.cursor = this.checked ? 'pointer' : 'not-allowed'; }
                 });
             }
         }, 0);
@@ -421,15 +430,19 @@ function renderThemeGrid(themes, pref) {
     });
 }
 
-// Select theme
-async function selectTheme(themeSlug) {
+// Select prebuilt theme from System Settings (avoid name collision with modal)
+async function selectPrebuiltThemeFromSettings(themeSlug, btnEl) {
     try {
+        if (btnEl) { btnEl.disabled = true; btnEl.classList.add('opacity-50','cursor-not-allowed'); }
         const response = await fetch('{{ route("user.themes.update") }}', {
             method: 'POST',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 theme_slug: themeSlug,
                 use_system_theme: false
@@ -448,8 +461,29 @@ async function selectTheme(themeSlug) {
     } catch (error) {
         console.error('Error selecting theme:', error);
         showNotification('Error applying theme', 'error');
-    }
+    } finally { if (btnEl) { btnEl.disabled = false; btnEl.classList.remove('opacity-50','cursor-not-allowed'); } }
 }
+
+// Helper to pull the slug from the apply button and call selectTheme
+function applySelectedThemeFromCard(btn){
+    const slug = btn.getAttribute('data-theme-slug');
+    if(!slug) return;
+    selectPrebuiltThemeFromSettings(slug, btn);
+}
+
+// Delegated click handler to ensure Apply always triggers
+document.addEventListener('click', function(e){
+    const btn = e.target.closest('.apply-btn');
+    if (!btn) return;
+    if (btn.disabled) return;
+    const slug = btn.getAttribute('data-theme-slug');
+    if (!slug) return;
+    e.preventDefault();
+    selectPrebuiltThemeFromSettings(slug, btn);
+});
+
+// Expose to window to be safe in case inline handlers are used elsewhere
+window.selectPrebuiltThemeFromSettings = selectPrebuiltThemeFromSettings;
 
 // Load user theme data
 async function loadUserThemeData() {
@@ -576,7 +610,10 @@ async function saveCustomThemeFromSettings(){
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
             },
+            credentials: 'same-origin',
             body: JSON.stringify(payload)
         });
         const data = await response.json();
@@ -597,14 +634,17 @@ async function resetToSystemTheme(){
         const response = await fetch('{{ route("user.themes.reset") }}', {
             method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            }
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
         });
         const data = await response.json();
         if (data.success) {
             showNotification('Reverted to system theme', 'success');
             refreshThemeCss();
-        } else {
+    } else {
             showNotification('Could not reset to system theme', 'error');
         }
     } catch (e) {

@@ -12,6 +12,7 @@ class Region extends Model
     protected $fillable = [
         'name',
         'code',
+        'country_id',
         'description',
         'is_active',
         'sort_order'
@@ -38,5 +39,25 @@ class Region extends Model
             ->orderBy('sort_order')
             ->orderBy('name')
             ->pluck('name', 'id');
+    }
+
+    /**
+     * Get regions for a specific country
+     */
+    public static function getForCountry($countryId)
+    {
+        return static::active()
+            ->where('country_id', $countryId)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->pluck('name', 'id');
+    }
+
+    /**
+     * Get the country that owns this region
+     */
+    public function country()
+    {
+        return $this->belongsTo(Country::class);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AuditLog extends Model
 {
@@ -19,7 +20,7 @@ class AuditLog extends Model
         'new_values',
         'description',
         'ip_address',
-        'user_agent'
+        'user_agent',
     ];
 
     protected $casts = [
@@ -27,26 +28,40 @@ class AuditLog extends Model
         'new_values' => 'array',
     ];
 
-    /**
-     * Relationship with User
-     */
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     /**
-     * Scope for specific model
+     * Record an audit log entry
      */
-    public function scopeForModel($query, $modelType, $modelId = null)
+    public static function record(string $action, ?User $user, Model $model, array $changes = []): self
     {
-        $query->where('model_type', $modelType);
-        
-        if ($modelId) {
-            $query->where('model_id', $modelId);
-        }
-        
-        return $query;
+        return static::create([
+            'user_id' => $user?->id,
+            'action' => $action,
+            'model_type' => get_class($model),
+            'model_id' => $model->getKey(),
+            'model_name' => method_exists($model, 'getAttribute') ? ($model->getAttribute('name') ?? '') : '',
+            'old_values' => $changes['old'] ?? null,
+            'new_values' => $changes['new'] ?? null,
+            'description' => $changes['description'] ?? null,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+    }
+
+    /**
+     * Get logs for a specific model instance
+     */
+    public static function getForModel($model)
+    {
+        return static::where('model_type', get_class($model))
+            ->where('model_id', $model->id)
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 
     /**
@@ -66,32 +81,10 @@ class AuditLog extends Model
     }
 
     /**
-     * Get logs for a specific model instance
+     * Scope for specific model type
      */
-    public static function getForModel($model)
+    public function scopeForModelType($query, $modelType)
     {
-        return static::forModel(get_class($model), $model->id)
-            ->with('user')
-            ->orderBy('created_at', 'desc')
-            ->get();
-    }
-
-    /**
-     * Log an action
-     */
-    public static function log($action, $model, $description = null, $oldValues = null, $newValues = null)
-    {
-        return static::create([
-            'user_id' => auth()->id(),
-            'action' => $action,
-            'model_type' => get_class($model),
-            'model_id' => $model->id,
-            'model_name' => $model->name ?? $model->id,
-            'old_values' => $oldValues,
-            'new_values' => $newValues,
-            'description' => $description,
-            'ip_address' => request()->ip(),
-            'user_agent' => request()->userAgent(),
-        ]);
+        return $query->where('model_type', $modelType);
     }
 }
