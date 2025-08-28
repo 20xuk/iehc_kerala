@@ -352,6 +352,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the theme preference for this user
+     */
+    public function themePreference()
+    {
+        return $this->hasOne(\App\Models\UserThemePreference::class);
+    }
+
+    /**
      * Get the last donation for this user (donor)
      */
     public function getLastDonationAttribute()

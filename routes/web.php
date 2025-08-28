@@ -16,6 +16,7 @@ use App\Http\Controllers\SecretaryDashboardController;
 use App\Http\Controllers\DonorDashboardController;
 use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\UserThemeController;
 use Illuminate\Support\Facades\Route;
 
 // Authentication Routes
@@ -108,6 +109,18 @@ Route::middleware('auth')->group(function () {
             Route::post('/custom-colors', [ThemeController::class, 'updateCustomColors'])->name('admin.themes.custom-colors');
             Route::get('/css', [ThemeController::class, 'getCss'])->name('admin.themes.css');
             Route::get('/api', [ThemeController::class, 'getThemes'])->name('admin.themes.api');
+        });
+    });
+
+    // User Theme Preferences (for all authenticated users)
+    Route::middleware('auth')->group(function () {
+        Route::prefix('user/themes')->group(function () {
+            Route::get('/current', [UserThemeController::class, 'getCurrentTheme'])->name('user.themes.current');
+            Route::post('/update', [UserThemeController::class, 'updateTheme'])->name('user.themes.update');
+            Route::post('/reset', [UserThemeController::class, 'resetToSystemTheme'])->name('user.themes.reset');
+            Route::get('/available', [UserThemeController::class, 'getAvailableThemes'])->name('user.themes.available');
+            Route::post('/preview', [UserThemeController::class, 'previewTheme'])->name('user.themes.preview');
+            Route::get('/css', [UserThemeController::class, 'getUserCss'])->name('user.themes.css');
         });
     });
 

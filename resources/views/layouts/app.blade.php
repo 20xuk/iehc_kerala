@@ -17,8 +17,8 @@
     <!-- Livewire Scripts -->
     @livewireStyles
     
-    <!-- Theme CSS -->
-    <link rel="stylesheet" href="{{ route('admin.themes.css') }}" id="theme-css">
+          <!-- Theme CSS -->
+      <link rel="stylesheet" href="{{ route('user.themes.css') }}" id="theme-css">
     
     <!-- Additional Styles -->
     <style>

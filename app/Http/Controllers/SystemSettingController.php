@@ -6,6 +6,7 @@ use App\Models\SystemSetting;
 use App\Models\Country;
 use App\Models\Region;
 use App\Models\Theme;
+use App\Models\UserThemePreference;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -41,8 +42,16 @@ class SystemSettingController extends Controller
         // Get themes for the modal
         $themes = Theme::orderBy('sort_order')->get();
         $activeTheme = Theme::getActiveTheme();
+        
+        // Get user theme statistics
+        $userThemeStats = [
+            'total_users' => \App\Models\User::count(),
+            'system_theme_users' => UserThemePreference::where('use_system_theme', true)->count(),
+            'custom_theme_users' => UserThemePreference::where('use_system_theme', false)->count(),
+            'user_overrides' => UserThemePreference::where('use_system_theme', false)->count(),
+        ];
 
-        return view('admin.system-settings.index', compact('settings', 'groups', 'themes', 'activeTheme'));
+        return view('admin.system-settings.index', compact('settings', 'groups', 'themes', 'activeTheme', 'userThemeStats'));
     }
 
     /**
